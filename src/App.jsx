@@ -756,10 +756,12 @@ export default function App() {
               .animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
               @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
               .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+              @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+              .animate-float { animation: float 4s ease-in-out infinite; }
           `}</style>
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-80 bg-emerald-500/10 rounded-[100%] blur-[100px] pointer-events-none"></div>
           <div className="flex-1 flex flex-col items-center justify-center p-8 relative z-10 max-w-md mx-auto w-full animate-fade-in-up">
-              <div className="w-24 h-24 bg-gradient-to-tr from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-[2rem] flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative overflow-hidden">
+              <div className="animate-float w-24 h-24 bg-gradient-to-tr from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-[2rem] flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent"></div>
                   <Flame size={48} className="text-emerald-400 drop-shadow-[0_0_12px_rgba(0,242,254,0.4)] relative z-10" fill="currentColor" />
               </div>
@@ -968,8 +970,8 @@ export default function App() {
         {/* --- DASHBOARD --- */}
         {view === 'dashboard' && !isAdmin && (
           <div className="space-y-6 animate-fade-in">
-            {/* Premium Summary Card */}
-            <div className="relative overflow-hidden rounded-[2.5rem] p-8 bg-zinc-900 border border-zinc-800 group">
+            {/* Premium Summary Card con Glow */}
+            <div className="relative overflow-hidden rounded-[3rem] p-8 bg-gradient-to-b from-zinc-900 to-zinc-950 border border-emerald-500/20 shadow-[0_0_50px_rgba(16,185,129,0.15)] group transition-all duration-500 hover:shadow-[0_0_60px_rgba(0,242,254,0.2)]">
                <div className="absolute -right-10 -top-10 w-48 h-48 bg-emerald-500 rounded-full opacity-10 blur-[60px]"></div>
                <Flame className="absolute -right-6 -top-6 w-36 h-36 text-emerald-500/20 blur-[2px] pointer-events-none select-none" fill="currentColor" />
                
@@ -1007,7 +1009,8 @@ export default function App() {
               {Object.entries(MEAL_TYPES).map(([key, cfg]) => {
                 const cal = myTodayFoods.filter(f => f.meal === key).reduce((a,b) => a + (b.calories || 0), 0);
                 return (
-                  <Card key={key} onClick={() => { triggerHaptic(); setActiveMeal(key); setView('meal-detail'); }} className="p-5 flex items-center justify-between hover:border-zinc-700 cursor-pointer">
+                  <Card key={key} onClick={() => { triggerHaptic(); setActiveMeal(key); setView('meal-detail'); }} className="relative overflow-hidden p-5 flex items-center justify-between border border-zinc-800/50 hover:border-emerald-500/30 hover:shadow-[0_0_30px_rgba(16,185,129,0.1)] transition-all duration-300 cursor-pointer group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
                     <div className="flex items-center gap-5">
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${cfg.bg} ${cfg.color}`}>
                             {cfg.icon}
