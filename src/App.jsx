@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import flameIcon from './assets/flame.png';
+// Logo image removed for cleaner SVG approach
 import { 
   Plus, Trash2, Settings, Flame, ChevronRight, Search, X, Check, 
   Scale, ArrowLeft, Sun, Moon, Cookie, Activity, 
@@ -759,8 +759,9 @@ export default function App() {
           `}</style>
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-80 bg-emerald-500/10 rounded-[100%] blur-[100px] pointer-events-none"></div>
           <div className="flex-1 flex flex-col items-center justify-center p-8 relative z-10 max-w-md mx-auto w-full animate-fade-in-up">
-              <div className="w-20 h-20 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-center mb-6">
-                  <Zap size={36} className="text-emerald-500" fill="currentColor" />
+              <div className="w-24 h-24 bg-gradient-to-tr from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-[2rem] flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(16,185,129,0.15)] relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent"></div>
+                  <Flame size={48} className="text-emerald-400 drop-shadow-[0_0_12px_rgba(0,242,254,0.4)] relative z-10" fill="currentColor" />
               </div>
               <h1 className="text-4xl font-black tracking-tight mb-1">MiDéficit</h1>
               <p className="text-zinc-500 text-sm mb-10 font-medium">Tu sistema de control metabólico</p>
@@ -822,7 +823,7 @@ export default function App() {
       {/* Header Fijo */}
       <div className="fixed top-0 left-0 w-full z-50 px-6 py-4 flex justify-between items-center backdrop-blur-2xl border-b border-zinc-900 bg-black/80">
          <h1 className="font-black text-xl flex items-center gap-2 tracking-tight">
-             <img src={flameIcon} alt="MiDéficit" className="w-7 h-7 drop-shadow-[0_0_8px_rgba(0,242,254,0.8)]"/> MiDéficit
+             <Flame className="w-7 h-7 text-emerald-400 drop-shadow-[0_0_8px_rgba(0,242,254,0.6)]" fill="currentColor" /> MiDéficit
          </h1>
          <div className="flex items-center gap-3">
              <span className="text-xs font-bold text-zinc-400 capitalize">{authUser?.username}</span>
@@ -970,7 +971,7 @@ export default function App() {
             {/* Premium Summary Card */}
             <div className="relative overflow-hidden rounded-[2.5rem] p-8 bg-zinc-900 border border-zinc-800 group">
                <div className="absolute -right-10 -top-10 w-48 h-48 bg-emerald-500 rounded-full opacity-10 blur-[60px]"></div>
-               <img src={flameIcon} alt="" className="absolute -right-4 -top-4 w-32 h-32 opacity-20 blur-[2px] pointer-events-none select-none" />
+               <Flame className="absolute -right-6 -top-6 w-36 h-36 text-emerald-500/20 blur-[2px] pointer-events-none select-none" fill="currentColor" />
                
                <div className="relative z-10 mb-8">
                    <div className="flex justify-between items-end mb-4">
