@@ -624,23 +624,30 @@ export default function App() {
   const analyzeFoodImage = async (base64Data, mimeType) => {
       setIsScanning(true);
       try {
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          if (!apiKey) throw new Error("API Key no configurada. Revisa las variables de entorno.");
           const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
           const base64Clean = base64Data.split(',')[1];
           const payload = {
               contents: [{ role: "user", parts: [
-                      { text: "Eres experto nutricionista. Analiza la imagen de la comida e identifica todos los alimentos. Estima porción. Devuelve JSON ARRAY estricto de objetos con name, emoji, amount, unit('g' o 'ud'), calories, protein, carbs, fat." },
+                      { text: "Eres experto nutricionista. Analiza la imagen de la comida e identifica todos los alimentos. Estima la porción en gramos. Responde ÚNICAMENTE con un JSON array (sin texto adicional, sin markdown) de objetos con estos campos: name (string), emoji (string), amount (number en gramos), unit (string, 'g' o 'ud'), calories (number), protein (number), carbs (number), fat (number). Ejemplo: [{\"name\":\"Arroz\",\"emoji\":\"🍚\",\"amount\":150,\"unit\":\"g\",\"calories\":195,\"protein\":4,\"carbs\":43,\"fat\":0.3}]" },
                       { inlineData: { mimeType: mimeType, data: base64Clean } }
               ]}],
-              generationConfig: { responseMimeType: "application/json", responseSchema: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, emoji: { type: "STRING" }, amount: { type: "NUMBER" }, unit: { type: "STRING" }, calories: { type: "NUMBER" }, protein: { type: "NUMBER" }, carbs: { type: "NUMBER" }, fat: { type: "NUMBER" } }, required: ["name", "emoji", "amount", "unit", "calories", "protein", "carbs", "fat"] } } }
+              generationConfig: { temperature: 0.1 }
           };
           const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-          if (!response.ok) throw new Error("API Error");
           const data = await response.json();
-          const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if(textResult) setScannedItems(JSON.parse(textResult).map(item => ({ ...item, id: 'ai_'+Math.random(), originalAmount: item.amount, originalCalories: item.calories, originalProtein: item.protein, originalCarbs: item.carbs, originalFat: item.fat })));
+          if (!response.ok) throw new Error(`API Error ${response.status}: ${data?.error?.message || 'Error desconocido'}`);
+          let textResult = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          // Limpiar markdown si Gemini lo devuelve con ```json ... ```
+          textResult = textResult.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          if (!textResult) throw new Error("La IA no devolvió resultados.");
+          const parsed = JSON.parse(textResult);
+          setScannedItems(parsed.map(item => ({ ...item, id: 'ai_'+Math.random(), originalAmount: item.amount, originalCalories: item.calories, originalProtein: item.protein, originalCarbs: item.carbs, originalFat: item.fat })));
       } catch (e) {
-          alert("Error IA."); setImagePreview(null);
+          console.error("Error IA completo:", e);
+          alert(`Error IA: ${e.message}`);
+          setImagePreview(null);
       } finally { setIsScanning(false); }
   };
 
