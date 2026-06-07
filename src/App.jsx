@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import flameIcon from './assets/flame.png';
 import { 
   Plus, Trash2, Settings, Flame, ChevronRight, Search, X, Check, 
   Scale, ArrowLeft, Sun, Moon, Cookie, Activity, 
@@ -821,7 +822,7 @@ export default function App() {
       {/* Header Fijo */}
       <div className="fixed top-0 left-0 w-full z-50 px-6 py-4 flex justify-between items-center backdrop-blur-2xl border-b border-zinc-900 bg-black/80">
          <h1 className="font-black text-xl flex items-center gap-2 tracking-tight">
-             <Zap className="text-emerald-500" fill="currentColor"/> MiDéficit
+             <img src={flameIcon} alt="MiDéficit" className="w-7 h-7 drop-shadow-[0_0_8px_rgba(0,242,254,0.8)]"/> MiDéficit
          </h1>
          <div className="flex items-center gap-3">
              <span className="text-xs font-bold text-zinc-400 capitalize">{authUser?.username}</span>
@@ -969,6 +970,7 @@ export default function App() {
             {/* Premium Summary Card */}
             <div className="relative overflow-hidden rounded-[2.5rem] p-8 bg-zinc-900 border border-zinc-800 group">
                <div className="absolute -right-10 -top-10 w-48 h-48 bg-emerald-500 rounded-full opacity-10 blur-[60px]"></div>
+               <img src={flameIcon} alt="" className="absolute -right-4 -top-4 w-32 h-32 opacity-20 blur-[2px] pointer-events-none select-none" />
                
                <div className="relative z-10 mb-8">
                    <div className="flex justify-between items-end mb-4">
