@@ -1,11 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 // Logo image removed for cleaner SVG approach
 import { 
   Plus, Trash2, Settings, Flame, ChevronRight, Search, X, Check, 
   Scale, ArrowLeft, Sun, Moon, Cookie, Activity, 
   Smile, Dumbbell, AlertTriangle, User, RefreshCcw, 
   TrendingUp, TrendingDown, Camera, ScanLine, ImageIcon, Edit2, 
-  Coffee, Target, Zap, Lock, LogIn, Database, Download
+  Coffee, Target, Zap, Lock, LogIn, Database, Download,
+  BarChart3, Calendar, MessageCircle, Sparkles, Trophy, Award, ThumbsDown, ChevronLeft, ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -210,8 +211,6 @@ const MacroBar = ({ label, current, max, colorClass }) => {
 const ProfileWizard = ({ onComplete, initialName }) => {
   const [step, setStep] = useState(2); // Saltamos el nombre porque viene del login
   const [data, setData] = useState({ name: initialName, gender: 'male', age: '', weight: '', height: '', jobType: 'sedentary', workoutLevel: 'none', goal: 'lose' });
-  const [error, setError] = useState('');
-
   const calculateResults = () => {
     const w = parseFloat(data.weight) || 0, h = parseFloat(data.height) || 0, a = parseFloat(data.age) || 0;
     let bmr = (10 * w) + (6.25 * h) - (5 * a) + (data.gender === 'male' ? 5 : -161);
@@ -395,18 +394,58 @@ export default function App() {
   // Estados de Datos
   const [allFoodsDB, setAllFoodsDB] = useState(DEFAULT_FOODS);
   const [dailyLogs, setDailyLogs] = useState([]);
+  const [weightLogs, setWeightLogs] = useState([]);
   
   // Vistas y navegación
-  const [view, setView] = useState('auth'); // auth, dashboard, meal-detail, add-food, scanner
+  const [view, setInternalView] = useState('auth'); // auth, dashboard, meal-detail, add-food, scanner, progress
+
+  // Wrapper para sincronizar la navegación con el historial del navegador/móvil (Botón Atrás)
+  const setView = useCallback((newView) => {
+      setInternalView(v => {
+          if (newView !== v) {
+              window.history.pushState({ view: newView }, '');
+              return newView;
+          }
+          return v;
+      });
+  }, []);
+
+  // Escuchar el evento de retroceso físico
+  useEffect(() => {
+      const handlePopState = (event) => {
+          if (event.state && event.state.view) {
+              setInternalView(event.state.view);
+          } else {
+              setInternalView(authUser ? 'dashboard' : 'auth');
+          }
+      };
+      
+      if (!window.history.state || !window.history.state.view) {
+          window.history.replaceState({ view: 'auth' }, '');
+      }
+
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+  }, [authUser]);
+  const [selectedDate, setSelectedDate] = useState(getTodayString()); // Para registrar comidas en días pasados
   const [activeMeal, setActiveMeal] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDbFood, setSelectedDbFood] = useState(null);
   const [gramsInput, setGramsInput] = useState('');
+  
+  // Peso
+  const [showWeightInput, setShowWeightInput] = useState(false);
+  const [weightInputVal, setWeightInputVal] = useState('');
 
   // Escáner IA
   const [isScanning, setIsScanning] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [scannedItems, setScannedItems] = useState([]);
+
+  // Módulo de Progreso + Coach IA
+  const [progressPeriod, setProgressPeriod] = useState('week');
+  const [coachFeedback, setCoachFeedback] = useState('');
+  const [isLoadingCoach, setIsLoadingCoach] = useState(false);
 
   // Variables para Login Simple
   const [loginUser, setLoginUser] = useState('');
@@ -467,6 +506,7 @@ export default function App() {
     }, (err) => console.error("Foods error:", err));
 
     let unsubLogs = () => {};
+    let unsubWeights = () => {};
     
     if (authUser) {
         // Escuchar SOLO los registros del usuario logueado en su propia carpeta personal
@@ -474,9 +514,14 @@ export default function App() {
             const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setDailyLogs(logs);
         }, (err) => console.error("Logs error:", err));
+        
+        unsubWeights = onSnapshot(collection(db, 'users', authUser.username, 'weights'), (snapshot) => {
+            const w = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setWeightLogs(w);
+        }, (err) => console.error("Weights error:", err));
     }
 
-    return () => { unsubFoods(); unsubLogs(); };
+    return () => { unsubFoods(); unsubLogs(); unsubWeights(); };
   }, [fbUser, authUser]);
 
   // --- LÓGICA PSEUDO-LOGIN ---
@@ -557,17 +602,17 @@ export default function App() {
       setView('auth');
   };
 
-  // Filtrar logs del usuario actual para HOY
+  // Filtrar logs del usuario actual para la fecha seleccionada
   const todayString = getTodayString();
-  const myTodayFoods = useMemo(() => {
+  const currentDayFoods = useMemo(() => {
       if (!authUser) return [];
-      return dailyLogs.filter(log => log.date === todayString);
-  }, [dailyLogs, authUser, todayString]);
+      return dailyLogs.filter(log => log.date === selectedDate);
+  }, [dailyLogs, authUser, selectedDate]);
 
   // Cálculos reactivos de macros
-  const totals = useMemo(() => myTodayFoods.reduce((acc, item) => ({
+  const totals = useMemo(() => currentDayFoods.reduce((acc, item) => ({
       cal: acc.cal + (item.calories || 0), p: acc.p + (item.protein || 0), c: acc.c + (item.carbs || 0), f: acc.f + (item.fat || 0),
-  }), { cal: 0, p: 0, c: 0, f: 0 }), [myTodayFoods]);
+  }), { cal: 0, p: 0, c: 0, f: 0 }), [currentDayFoods]);
 
   const dailyGoal = profile?.target || 2000;
   const macroGoals = useMemo(() => ({
@@ -580,12 +625,154 @@ export default function App() {
       try {
           await addDoc(collection(db, 'users', authUser.username, 'logs'), {
               ...foodObj,
-              date: todayString,
+              date: selectedDate || todayString,
               timestamp: Date.now()
           });
           setSearchTerm(''); setSelectedDbFood(null); setGramsInput('');
           setView('meal-detail');
       } catch(e) { console.error("Error guardando comida:", e); }
+  };
+
+  // --- LÓGICA DE PESO ---
+  const handleSaveWeight = async () => {
+      triggerHaptic();
+      const val = parseFloat(weightInputVal);
+      if (!val || val < 30 || val > 300) return;
+      try {
+          await setDoc(doc(db, 'users', authUser.username, 'weights', selectedDate), {
+              weight: val,
+              date: selectedDate,
+              timestamp: Date.now()
+          });
+          setShowWeightInput(false);
+          setWeightInputVal('');
+      } catch (e) { console.error("Error guardando peso:", e); }
+  };
+
+  const currentDayWeight = useMemo(() => {
+      const match = weightLogs.find(w => w.id === selectedDate);
+      return match ? match.weight : null;
+  }, [weightLogs, selectedDate]);
+
+  const weightTrend = useMemo(() => {
+      if (weightLogs.length === 0) return { current: null, diff: 0, initial: profile?.weight || 0 };
+      const sorted = [...weightLogs].sort((a,b) => b.date.localeCompare(a.date));
+      const current = sorted[0].weight;
+      const initial = profile?.weight || current;
+      const diff = current - initial;
+      return { current, initial, diff: Number(diff.toFixed(1)) };
+  }, [weightLogs, profile]);
+
+  // --- FUNCIONES DE PROGRESO ---
+  const getDateString = (daysAgo) => {
+      const d = new Date();
+      d.setDate(d.getDate() - daysAgo);
+      return d.toISOString().split('T')[0];
+  };
+
+  const getDayName = (dateStr) => {
+      const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+      return days[new Date(dateStr + 'T12:00:00').getDay()];
+  };
+
+  const getProgressData = useMemo(() => {
+      const numDays = progressPeriod === 'week' ? 7 : 30;
+      const dates = [];
+      for (let i = numDays - 1; i >= 0; i--) {
+          dates.push(getDateString(i));
+      }
+      
+      const dailyData = dates.map(date => {
+          const dayLogs = dailyLogs.filter(log => log.date === date);
+          const cal = dayLogs.reduce((a, b) => a + (b.calories || 0), 0);
+          const p = dayLogs.reduce((a, b) => a + (b.protein || 0), 0);
+          const c = dayLogs.reduce((a, b) => a + (b.carbs || 0), 0);
+          const f = dayLogs.reduce((a, b) => a + (b.fat || 0), 0);
+          const foods = dayLogs.map(l => ({ name: l.name, cal: l.calories, meal: l.meal }));
+          return { date, day: getDayName(date), cal, p, c, f, foods, hasData: dayLogs.length > 0 };
+      });
+      
+      const daysWithData = dailyData.filter(d => d.hasData);
+      const totalCal = daysWithData.reduce((a, b) => a + b.cal, 0);
+      const avgCal = daysWithData.length ? Math.round(totalCal / daysWithData.length) : 0;
+      const avgP = daysWithData.length ? Math.round(daysWithData.reduce((a, b) => a + b.p, 0) / daysWithData.length) : 0;
+      const avgC = daysWithData.length ? Math.round(daysWithData.reduce((a, b) => a + b.c, 0) / daysWithData.length) : 0;
+      const avgF = daysWithData.length ? Math.round(daysWithData.reduce((a, b) => a + b.f, 0) / daysWithData.length) : 0;
+      const bestDay = daysWithData.length ? daysWithData.reduce((a, b) => Math.abs(b.cal - dailyGoal) < Math.abs(a.cal - dailyGoal) ? b : a) : null;
+      const worstDay = daysWithData.length ? daysWithData.reduce((a, b) => Math.abs(b.cal - dailyGoal) > Math.abs(a.cal - dailyGoal) ? b : a) : null;
+      const daysOnTarget = daysWithData.filter(d => d.cal <= dailyGoal * 1.05).length;
+      const adherence = daysWithData.length ? Math.round((daysOnTarget / daysWithData.length) * 100) : 0;
+      
+      let chartData = [];
+      if (progressPeriod === 'week') {
+          chartData = dailyData.map(d => ({ label: d.day, date: d.date, cal: d.cal, hasData: d.hasData, isToday: d.date === todayString }));
+      } else {
+          // Agrupar en 4 semanas (7 días por barra)
+          for (let w = 0; w < 4; w++) {
+              const weekSegment = dailyData.slice(dailyData.length - (w + 1) * 7, dailyData.length - w * 7);
+              const activeDays = weekSegment.filter(d => d.hasData);
+              const weekCal = activeDays.length ? Math.round(activeDays.reduce((sum, d) => sum + d.cal, 0) / activeDays.length) : 0;
+              chartData.unshift({ 
+                  label: w === 0 ? 'Esta Sem' : `Sem -${w}`, 
+                  cal: weekCal, 
+                  hasData: activeDays.length > 0, 
+                  isToday: w === 0 
+              });
+          }
+      }
+      
+      const maxCalChart = Math.max(dailyGoal, ...chartData.map(d => d.cal));
+      const maxCal = Math.max(dailyGoal, ...dailyData.map(d => d.cal));
+      
+      return { dailyData, chartData, maxCalChart, avgCal, avgP, avgC, avgF, bestDay, worstDay, adherence, maxCal, daysWithData: daysWithData.length };
+  }, [dailyLogs, progressPeriod, dailyGoal, todayString]);
+
+  const askCoachGemini = async () => {
+      setIsLoadingCoach(true);
+      setCoachFeedback('');
+      try {
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          if (!apiKey) throw new Error('API Key no configurada');
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+          
+          const data = getProgressData;
+          const period = progressPeriod === 'week' ? 'semana' : 'mes';
+          const detailedLog = data.dailyData.filter(d => d.hasData).map(d => 
+              `${d.day} ${d.date}: ${d.cal} kcal (P:${d.p}g C:${d.c}g G:${d.f}g) - Comió: ${d.foods.map(f => f.name).join(', ') || 'Sin registro'}`
+          ).join('\n');
+          
+          const prompt = `Eres Defi, la mascota de la app MiDéficit (una llamita de fuego). Eres un coach directo, muy humano y que no se anda con rodeos. El usuario se llama "${authUser?.username || 'Usuario'}". Adapta tu lenguaje a su género si puedes deducirlo de su nombre, o háblale de forma neutral y cercana. NUNCA uses lenguaje robótico ni saludos formales.
+
+REGLAS ESTRICTAS:
+- Si el usuario no cumplió su meta de calorías (adherencia baja), REGÁÑALO con firmeza. Dile que tiene que enfocarse y dejar las excusas. Si cumplió, felicítalo pero pídele que mantenga el ritmo.
+- Escribe EXACTAMENTE DOS PÁRRAFOS fluidos. NADA de listas.
+- Párrafo 1 (aprox. 200 caracteres): Regaño duro o felicitación basado en su adherencia, calorías y su evolución de peso. Relaciona el peso con su esfuerzo en la dieta.
+- Párrafo 2 (aprox. 200 caracteres): Analiza sus comidas. Menciona lo bueno que comió y lo malo (si lo hay). Dale un par de sugerencias directas de qué comer en su lugar.
+
+Datos del usuario:
+- Objetivo: ${dailyGoal} kcal
+- Período analizado: Última ${period}
+- Promedio diario: ${data.avgCal} kcal
+- Adherencia al plan: ${data.adherence}%
+
+Registro detallado:
+${detailedLog}
+
+Dime tu párrafo corto:`;
+
+          const payload = {
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.8 }
+          };
+          const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result?.error?.message || 'Error de la API');
+          const text = result.candidates?.[0]?.content?.parts?.[0]?.text || 'El coach no respondió.';
+          setCoachFeedback(text);
+      } catch(e) {
+          console.error('Error Coach:', e);
+          setCoachFeedback(`Error: ${e.message}`);
+      } finally { setIsLoadingCoach(false); }
   };
 
   const handleAddManualFood = () => {
@@ -824,9 +1011,33 @@ export default function App() {
 
       {/* Header Fijo */}
       <div className="fixed top-0 left-0 w-full z-50 px-6 py-4 flex justify-between items-center backdrop-blur-2xl border-b border-zinc-900 bg-black/80">
-         <h1 className="font-black text-xl flex items-center gap-2 tracking-tight">
-             <Flame className="w-7 h-7 text-emerald-400 drop-shadow-[0_0_8px_rgba(0,242,254,0.6)]" fill="currentColor" /> MiDéficit
-         </h1>
+         {view === 'dashboard' && !isAdmin ? (
+             <div className="flex items-center gap-2">
+                 <button onClick={() => {
+                     const d = new Date(selectedDate + 'T12:00:00');
+                     d.setDate(d.getDate() - 1);
+                     setSelectedDate(d.toISOString().split('T')[0]);
+                     triggerHaptic();
+                 }} className="p-2 text-zinc-400 hover:text-white bg-zinc-900 rounded-full transition-colors"><ChevronLeft size={18}/></button>
+                 
+                 <h1 className="font-black text-xl tracking-tight text-center min-w-[100px] text-white">
+                    {selectedDate === todayString ? 'Hoy' : new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                 </h1>
+                 
+                 <button onClick={() => {
+                     if (selectedDate === todayString) return;
+                     const d = new Date(selectedDate + 'T12:00:00');
+                     d.setDate(d.getDate() + 1);
+                     setSelectedDate(d.toISOString().split('T')[0]);
+                     triggerHaptic();
+                 }} className={`p-2 rounded-full transition-colors ${selectedDate === todayString ? 'text-zinc-800' : 'text-zinc-400 hover:text-white bg-zinc-900'}`} disabled={selectedDate === todayString}><ChevronRightIcon size={18}/></button>
+             </div>
+         ) : (
+             <h1 className="font-black text-xl flex items-center gap-2 tracking-tight">
+                 <Flame className="w-7 h-7 text-emerald-400 drop-shadow-[0_0_8px_rgba(0,242,254,0.6)]" fill="currentColor" /> MiDéficit
+             </h1>
+         )}
+         
          <div className="flex items-center gap-3">
              <span className="text-xs font-bold text-zinc-400 capitalize">{authUser?.username}</span>
              <button onClick={handleLogout} className="p-2 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors">
@@ -835,7 +1046,7 @@ export default function App() {
          </div>
       </div>
 
-      <main className="pt-24 pb-10 px-6 max-w-3xl mx-auto min-h-screen">
+      <main className="pt-24 pb-28 px-6 max-w-3xl mx-auto min-h-screen">
         
         {/* --- PANEL DE ADMINISTRADOR --- */}
         {view === 'admin' && isAdmin && (
@@ -1001,13 +1212,36 @@ export default function App() {
                    <MacroBar label="Carbohidratos" current={totals.c} max={macroGoals.c} colorClass="bg-blue-500" />
                    <MacroBar label="Grasas" current={totals.f} max={macroGoals.f} colorClass="bg-orange-500" />
                </div>
+               <div className="relative z-10 bg-zinc-950 p-5 rounded-3xl border border-zinc-800/50 mt-4 flex items-center justify-between shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
+                   <div>
+                       <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Peso en esta fecha</p>
+                       <div className="flex items-center gap-2">
+                           {showWeightInput ? (
+                               <div className="flex items-center gap-2 animate-fade-in">
+                                   <input type="number" value={weightInputVal} onChange={e => setWeightInputVal(e.target.value)} placeholder="00.0" className="w-16 bg-zinc-900 border border-zinc-700 rounded-lg p-1 text-center font-bold text-white text-base focus:outline-none focus:border-emerald-500" autoFocus />
+                                   <span className="text-zinc-400 font-bold text-sm">kg</span>
+                                   <button onClick={handleSaveWeight} className="bg-emerald-500 text-black p-1.5 rounded-lg ml-1 hover:bg-emerald-400"><Check size={16} strokeWidth={3}/></button>
+                                   <button onClick={() => setShowWeightInput(false)} className="bg-zinc-800 text-zinc-400 p-1.5 rounded-lg hover:text-white"><X size={16}/></button>
+                               </div>
+                           ) : (
+                               <div className="flex items-center gap-2">
+                                   <p className={`text-2xl font-black ${currentDayWeight ? 'text-white' : 'text-zinc-600'}`}>{currentDayWeight ? `${currentDayWeight} kg` : '-- kg'}</p>
+                                   <button onClick={() => { setWeightInputVal(currentDayWeight || ''); setShowWeightInput(true); triggerHaptic(); }} className="p-1.5 text-zinc-500 hover:text-emerald-400 transition-colors bg-zinc-900 rounded-lg border border-zinc-800"><Edit2 size={14}/></button>
+                               </div>
+                           )}
+                       </div>
+                   </div>
+                   <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                       <Activity className="text-emerald-500" size={20}/>
+                   </div>
+               </div>
             </div>
 
             {/* Menú de Comidas */}
             <div className="grid gap-3">
               <h3 className="font-bold text-sm tracking-widest uppercase text-zinc-500 px-2 mt-4 mb-1">Registro Diario</h3>
               {Object.entries(MEAL_TYPES).map(([key, cfg]) => {
-                const cal = myTodayFoods.filter(f => f.meal === key).reduce((a,b) => a + (b.calories || 0), 0);
+                const cal = currentDayFoods.filter(f => f.meal === key).reduce((a,b) => a + (b.calories || 0), 0);
                 return (
                   <Card key={key} onClick={() => { triggerHaptic(); setActiveMeal(key); setView('meal-detail'); }} className="relative overflow-hidden p-5 flex items-center justify-between border border-zinc-800/50 hover:border-emerald-500/30 hover:shadow-[0_0_30px_rgba(16,185,129,0.1)] transition-all duration-300 cursor-pointer group">
                     <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
@@ -1021,7 +1255,7 @@ export default function App() {
                         </div>
                     </div>
                     <div className="p-3 rounded-full bg-zinc-950 text-zinc-600">
-                        <ChevronRight size={20}/>
+                        <ChevronRightIcon size={20}/>
                     </div>
                   </Card>
                 )
@@ -1033,19 +1267,36 @@ export default function App() {
         {/* --- DETALLE COMIDA --- */}
         {view === 'meal-detail' && !isAdmin && (
           <div className="animate-fade-in h-full flex flex-col">
-            <div className="flex items-center gap-4 mb-8">
-                <button onClick={() => { triggerHaptic(); setView('dashboard'); }} className="p-3 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors"><ArrowLeft size={20}/></button>
-                <h2 className="text-3xl font-black tracking-tight">{MEAL_TYPES[activeMeal]?.label}</h2>
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => { triggerHaptic(); setSelectedDate(getTodayString()); setView('dashboard'); }} className="p-3 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors"><ArrowLeft size={20}/></button>
+                    <h2 className="text-3xl font-black tracking-tight">{MEAL_TYPES[activeMeal]?.label}</h2>
+                </div>
             </div>
             
+            {/* Selector de Fecha */}
+            <div className="flex items-center gap-3 mb-6 bg-zinc-900 border border-zinc-800 rounded-2xl p-3">
+                <Calendar size={18} className="text-emerald-500 shrink-0" />
+                <input 
+                    type="date" 
+                    value={selectedDate} 
+                    onChange={(e) => setSelectedDate(e.target.value)} 
+                    max={getTodayString()}
+                    className="flex-1 bg-transparent text-white font-bold outline-none text-sm [color-scheme:dark]"
+                />
+                {selectedDate !== getTodayString() && (
+                    <button onClick={() => setSelectedDate(getTodayString())} className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl hover:bg-emerald-500/20 transition-colors">Hoy</button>
+                )}
+            </div>
+
             <div className="flex-1 space-y-3 mb-24">
-              {myTodayFoods.filter(f => f.meal === activeMeal).length === 0 ? (
+              {currentDayFoods.filter(f => f.meal === activeMeal).length === 0 ? (
                   <div className="text-center p-12 text-zinc-600 border border-zinc-800/50 rounded-3xl border-dashed">
                       <Cookie className="mx-auto mb-4 opacity-50" size={40}/>
                       <p className="font-bold">Aún no has registrado nada.</p>
                   </div>
               ) : (
-                  myTodayFoods.filter(f => f.meal === activeMeal).map(f => (
+                  currentDayFoods.filter(f => f.meal === activeMeal).map(f => (
                     <Card key={f.id} className="p-4 flex justify-between items-center group bg-zinc-900">
                        <div className="flex items-center gap-4">
                           <div className="w-12 h-12 bg-zinc-950 rounded-2xl flex items-center justify-center text-2xl shrink-0 border border-zinc-800">{f.emoji}</div>
@@ -1235,7 +1486,175 @@ export default function App() {
           </div>
         )}
 
+        {/* --- VISTA DE PROGRESO --- */}
+        {view === 'progress' && !isAdmin && (
+          <div className="animate-fade-in">
+            <div className="flex items-center gap-4 mb-8">
+                <button onClick={() => { triggerHaptic(); setView('dashboard'); }} className="p-3 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors"><ArrowLeft size={20}/></button>
+                <h2 className="text-3xl font-black tracking-tight">Mi Progreso</h2>
+            </div>
+
+            {/* Toggle Semana / Mes */}
+            <div className="flex gap-2 mb-8 bg-zinc-900 p-1.5 rounded-2xl border border-zinc-800">
+                <button onClick={() => setProgressPeriod('week')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${progressPeriod === 'week' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'text-zinc-400 hover:text-white'}`}><Flame size={16}/> Semana</button>
+                <button onClick={() => setProgressPeriod('month')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${progressPeriod === 'month' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'text-zinc-400 hover:text-white'}`}><BarChart3 size={16}/> Mes</button>
+            </div>
+
+            {getProgressData.daysWithData === 0 ? (
+                <div className="text-center p-12 text-zinc-600 border border-zinc-800/50 rounded-3xl border-dashed">
+                    <BarChart3 className="mx-auto mb-4 opacity-50" size={48}/>
+                    <p className="font-bold text-lg mb-2">Sin datos todavía</p>
+                    <p className="text-sm">Registra tus comidas para ver tu progreso aquí.</p>
+                </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Tarjetas de Resumen */}
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 col-span-2 flex items-center justify-between">
+                        <div>
+                            <p className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase mb-1">Evolución de Peso</p>
+                            <div className="flex items-baseline gap-2">
+                                <p className="text-2xl font-black text-white">{weightTrend.current ? `${weightTrend.current} kg` : 'Sin datos'}</p>
+                                {weightTrend.current && <span className="text-xs font-bold text-zinc-500">vs {weightTrend.initial} kg inicial</span>}
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase mb-1">Diferencia</p>
+                            <div className={`px-3 py-1.5 rounded-xl font-bold text-sm inline-block ${weightTrend.diff < 0 ? 'bg-emerald-500/20 text-emerald-400' : weightTrend.diff > 0 ? 'bg-red-500/20 text-red-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                                {weightTrend.diff > 0 ? '+' : ''}{weightTrend.diff} kg
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+                        <p className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase mb-1">Promedio</p>
+                        <p className="text-2xl font-black text-white">{getProgressData.avgCal} <span className="text-sm text-emerald-500">kcal</span></p>
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+                        <p className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase mb-1">Adherencia</p>
+                        <p className={`text-2xl font-black ${getProgressData.adherence >= 70 ? 'text-emerald-400' : getProgressData.adherence >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{getProgressData.adherence}%</p>
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+                        <p className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase mb-1">Mejor Día</p>
+                        <p className="text-sm font-bold text-emerald-400">{getProgressData.bestDay ? `${getProgressData.bestDay.day} (${getProgressData.bestDay.cal})` : '-'}</p>
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+                        <p className="text-zinc-500 text-[10px] font-bold tracking-widest uppercase mb-1">Peor Día</p>
+                        <p className="text-sm font-bold text-red-400">{getProgressData.worstDay ? `${getProgressData.worstDay.day} (${getProgressData.worstDay.cal})` : '-'}</p>
+                    </div>
+                </div>
+
+                {/* Gráfico de Barras */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                    <h3 className="font-bold text-sm tracking-widest uppercase text-zinc-500 mb-5">{progressPeriod === 'week' ? 'Calorías Diarias' : 'Promedio Semanal (Mes)'}</h3>
+                    <div className="space-y-3">
+                        {getProgressData.chartData.map((d, i) => (
+                            <div 
+                                key={d.label + i} 
+                                className={`flex items-center gap-3 ${progressPeriod === 'week' ? 'cursor-pointer hover:bg-zinc-800/50 p-1.5 -mx-1.5 rounded-xl transition-colors' : ''}`}
+                                onClick={() => {
+                                    if (progressPeriod === 'week') {
+                                        setSelectedDate(d.date);
+                                        setView('dashboard');
+                                        triggerHaptic();
+                                    }
+                                }}
+                            >
+                                <span className={`text-[11px] font-bold w-12 shrink-0 ${d.isToday ? 'text-emerald-400' : 'text-zinc-500'}`}>{d.label}</span>
+                                <div className="flex-1 h-7 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800/50 relative">
+                                    <div 
+                                        className={`h-full rounded-full transition-all duration-700 ease-out relative ${d.cal > dailyGoal ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]' : 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]'}`}
+                                        style={{ width: `${d.hasData ? Math.min(100, (d.cal / getProgressData.maxCalChart) * 100) : 0}%`, transitionDelay: `${i * 50}ms` }}
+                                    >
+                                        <div className="absolute top-0 right-0 bottom-0 w-3 bg-white/20 blur-[2px]"></div>
+                                    </div>
+                                    {/* Línea del objetivo */}
+                                    <div className="absolute top-0 bottom-0 w-px bg-emerald-500/40" style={{ left: `${(dailyGoal / getProgressData.maxCalChart) * 100}%` }}></div>
+                                </div>
+                                <span className={`text-xs font-bold w-10 text-right shrink-0 ${!d.hasData ? 'text-zinc-700' : d.cal > dailyGoal ? 'text-red-400' : 'text-zinc-300'}`}>{d.hasData ? d.cal : '-'}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-2 mt-4 text-[10px] text-zinc-600">
+                        <div className="w-3 h-px bg-emerald-500/40"></div> Meta Diaria: {dailyGoal} kcal
+                    </div>
+                </div>
+
+                {/* Macros Promedio */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                    <h3 className="font-bold text-sm tracking-widest uppercase text-zinc-500 mb-4">Macros Promedio</h3>
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm font-bold text-emerald-400">🟢 Proteína</span>
+                            <span className="text-sm font-bold">{getProgressData.avgP}g <span className="text-zinc-600">/ {macroGoals.p}g</span></span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm font-bold text-blue-400">🔵 Carbohidratos</span>
+                            <span className="text-sm font-bold">{getProgressData.avgC}g <span className="text-zinc-600">/ {macroGoals.c}g</span></span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm font-bold text-orange-400">🟠 Grasas</span>
+                            <span className="text-sm font-bold">{getProgressData.avgF}g <span className="text-zinc-600">/ {macroGoals.f}g</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Defi Mascot IA */}
+                <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-emerald-500/20 rounded-3xl p-6 shadow-[0_0_30px_rgba(16,185,129,0.1)]">
+                    <h3 className="font-bold text-sm tracking-widest uppercase text-zinc-500 mb-6 flex items-center gap-2">
+                        <div className="relative w-5 h-5 flex items-center justify-center">
+                           <Flame size={20} className="text-emerald-400 absolute" />
+                           <div className="flex gap-[2px] absolute top-[8px]">
+                               <div className="w-[2px] h-[2px] bg-black rounded-full"></div>
+                               <div className="w-[2px] h-[2px] bg-black rounded-full"></div>
+                           </div>
+                        </div>
+                        Pregúntale a Defi
+                    </h3>
+                    
+                    {coachFeedback ? (
+                        <div className="space-y-6 animate-fade-in">
+                            <div className="p-2 border-l-2 border-emerald-500/30 pl-4">
+                                <p className="text-[17px] font-medium tracking-tight text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                                    {coachFeedback}
+                                </p>
+                            </div>
+                            <button onClick={() => { triggerHaptic(); askCoachGemini(); }} disabled={isLoadingCoach} className="w-full p-4 rounded-2xl font-bold text-sm bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2">
+                                <RefreshCcw size={16} className={isLoadingCoach ? 'animate-spin' : ''}/> Que Defi lo diga diferente
+                            </button>
+                        </div>
+                    ) : (
+                        <button onClick={() => { triggerHaptic(); askCoachGemini(); }} disabled={isLoadingCoach} className="w-full p-5 rounded-2xl font-bold text-base bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center justify-center gap-3">
+                            {isLoadingCoach ? (
+                                <><RefreshCcw size={20} className="animate-spin"/> Defi está analizando...</>
+                            ) : (
+                                <>¿Qué opina Defi de mi progreso?</>
+                            )}
+                        </button>
+                    )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
+
+      {/* --- BOTTOM NAV BAR --- */}
+      {authUser && !isAdmin && (view === 'dashboard' || view === 'progress') && (
+        <div className="fixed bottom-0 left-0 w-full z-50 bg-black/60 backdrop-blur-xl border-t border-zinc-900 pb-safe">
+            <div className="flex justify-around items-center p-2 max-w-md mx-auto">
+                <button onClick={() => { triggerHaptic(); setView('dashboard'); }} className={`flex flex-col items-center p-3 rounded-2xl w-24 transition-all ${view === 'dashboard' ? 'text-emerald-400 bg-emerald-500/10' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <Activity size={24} className="mb-1" />
+                    <span className="text-[10px] font-bold">Diario</span>
+                </button>
+                <button onClick={() => { triggerHaptic(); setCoachFeedback(''); setView('progress'); }} className={`flex flex-col items-center p-3 rounded-2xl w-24 transition-all ${view === 'progress' ? 'text-emerald-400 bg-emerald-500/10' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <BarChart3 size={24} className="mb-1" />
+                    <span className="text-[10px] font-bold">Progreso</span>
+                </button>
+            </div>
+        </div>
+      )}
     </div>
   );
 }
